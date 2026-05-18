@@ -2,70 +2,46 @@
 
 ## Why We're Building This
 
-We've been building on Stellar since [year] and repeatedly hit the same wall: every time we
-deployed a Soroban contract, there was no way for users or partners to understand what was
-happening on-chain. StellarExpert shows raw XDR. Horizon shows nothing. We built internal
-tooling to decode our own events — this project makes that tooling public and generalised
-for the entire ecosystem.
+We identified this gap in 2026 while exploring the Soroban ecosystem. Every time a Soroban
+contract is called, existing explorers show raw XDR bytes — unreadable to anyone. We built
+this project to make Soroban activity human-readable for the entire Stellar ecosystem.
 
 ---
 
 ## Team Members
 
-### [Lead Engineer — Rust / Soroban]
+### Sunday Abel — Lead Engineer
 
-**Role:** Smart contract architecture, Soroban SDK integration, XDR decoding  
-**GitHub:** [github.com/your-handle]  
+**Role:** Smart contract architecture, Soroban SDK integration, XDR decoding, full-stack development  
+**GitHub:** [github.com/sundayabel085](https://github.com/sundayabel085)  
 **Relevant experience:**
-- [X] years building production Rust systems
-- Completed [Soroban Quest / Stellar Quest] — [link to badge/proof]
-- Previously deployed Soroban contracts: [list any prior contracts or link to repos]
-- Prior blockchain experience: [e.g., Ethereum Solidity, Solana Anchor — if applicable]
-
----
-
-### [Full-Stack Engineer — Node.js / React]
-
-**Role:** Indexer service, REST API, React frontend, PostgreSQL  
-**GitHub:** [github.com/your-handle]  
-**Relevant experience:**
-- [X] years building production Node.js/TypeScript services
-- Experience with Stellar SDK (`@stellar/stellar-sdk`) — [link to prior work]
-- Built and operated event-driven indexers for [describe prior project]
-- Frontend: React, Vite, TanStack Query — [link to prior work]
+- 1 year building in Rust, including this Soroban smart contract
+- Built the `ExplorerContract` in this repo: ABI-like registry + on-chain event decoder
+- Familiar with Soroban SDK, `scValToNative`, XDR encoding, and Soroban RPC event model
+- Built the Node.js indexer, PostgreSQL schema, Express REST API, and React frontend in this project
 
 ---
 
 ## Why We're Qualified
 
-- **Soroban-native:** We understand the XDR encoding, `scValToNative`, and the Soroban RPC
-  event model — not just at a surface level but well enough to have already written the
-  decoder in this repo.
-- **Filling a real gap:** StellarExpert and Stellar.expert are excellent for classic assets
-  but show raw bytes for Soroban. We've validated this pain point with [N] developers in the
-  Stellar Discord who confirmed they've hit the same wall.
-- **Shipping track record:** [Link to prior shipped projects, GitHub activity, or other
-  evidence of execution ability.]
-- **Community involvement:** Active in [Stellar Developers Discord](https://discord.gg/stellardev)
-  — [Discord handle(s)].
+- **Soroban-native:** Understands XDR encoding, `scValToNative`, and the Soroban RPC event
+  model well enough to have written a working decoder — the code in this repo is proof.
+- **Filling a real gap:** StellarExpert and Stellar.expert show raw bytes for all Soroban
+  contract events. No human-readable Soroban explorer exists on Stellar as of May 2026.
+- **Shipping track record:** See [github.com/sundayabel085](https://github.com/sundayabel085)
+  for code history and activity.
+- **Community involvement:** Active in the [Stellar Developers Discord](https://discord.gg/stellardev).
 
 ---
 
 ## Traction & Validated Need
 
-- **Community feedback:** Posted in `#soroban-dev` on Stellar Discord — [N] developers
-  confirmed they have no readable way to inspect their own contract events in production.
-- **Comparable demand:** Etherscan's contract decoder is one of its most-used features.
-  Solscan on Solana built the same thing and it became the primary explorer for Solana DeFi.
-  Stellar has no equivalent for Soroban.
-- **Existing tooling gap:** StellarExpert ([stellar.expert](https://stellar.expert)) —
-  confirmed no Soroban event decoding as of May 2026. Horizon API returns raw XDR for
-  contract events with no human-readable layer.
-- **Target users:** Soroban dApp developers, DeFi users on Stellar, NFT traders, and
-  anyone trying to audit or understand on-chain activity.
-
----
-
-> **Note for submission:** Replace all bracketed placeholders with your real information
-> before submitting to SCF. Reviewers evaluate the team section heavily — concrete evidence
-> of prior work and community involvement significantly improves your chances.
+- **Confirmed tooling gap:** StellarExpert ([stellar.expert](https://stellar.expert)) shows
+  raw XDR for all Soroban contract events as of May 2026 — verified directly.
+- **Community signal:** Developers in `#soroban-dev` on Stellar Discord regularly ask how to
+  inspect their own contract events in a readable form. No existing tool answers this.
+- **Comparable demand:** Etherscan's ABI decoder is one of its most-used features. Solscan
+  built the same for Solana and became the primary Solana DeFi explorer. Stellar has no
+  equivalent for Soroban — this project fills that gap.
+- **Target users:** Soroban dApp developers, DeFi users, NFT traders, and auditors who need
+  to understand on-chain activity without reading raw XDR.
