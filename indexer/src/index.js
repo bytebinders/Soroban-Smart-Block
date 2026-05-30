@@ -40,6 +40,7 @@ async function indexLedger(ledger) {
     decoded.storage_tiers = classifyStorageWrites(ev);
     await db.upsertEvent(decoded);
     publish(decoded);                          // Issue #39 — push to WS clients
+    handleVaultEvent(decoded);                 // vault ratio update (async, non-blocking)
     console.log(`[${ev.ledger}] ${decoded.function}: ${decoded.description}`);
   }
 
@@ -55,6 +56,11 @@ async function run() {
   await db.init();
   startApi();
   startAbiSync();
+
+  // Bootstrap vault indexer: initial ratio snapshot for all registered vaults
+  refreshAllVaults().catch(() => {});
+  // Periodic ratio refresh every 60s for vaults that accrue without emitting events
+  setInterval(() => refreshAllVaults().catch(() => {}), 60_000);
 
   let cursor = START_LEDGER || (await withRetry(() => rpc.getLatestLedger())).sequence - 100;
 
