@@ -1,5 +1,15 @@
 import { Link } from "react-router-dom";
 import type { DecodedEvent } from "../api";
+import FiatValue from "./FiatValue";
+import { getGasAlert } from "./GasLimitAlert";
+
+/** Parse amount and symbol from a transfer description like "Address GA… transferred 50.00 PYUSD to …" */
+function parseTransfer(description: string): { amount: number; symbol: string } | null {
+  const m = description.match(/transferred\s+([\d,.]+)\s+([A-Z]{2,10})/i);
+  if (!m) return null;
+  const amount = parseFloat(m[1].replace(/,/g, ""));
+  return isNaN(amount) ? null : { amount, symbol: m[2].toUpperCase() };
+}
 
 interface Props {
   events: DecodedEvent[];
@@ -50,7 +60,34 @@ export default function EventTable({ events }: Props) {
                 <FunctionBadge fn={ev.function} />
               </td>
               <td style={{ ...td, maxWidth: 480, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {ev.is_clawback && (
+                  <span className="badge clawback" style={{ marginRight: 6 }} title="Mandatory authority intervention">
+                    ⚠ COMPLIANCE: CLAWBACK
+                  </span>
+                )}
+                {getGasAlert(ev) && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginRight: 6,
+                      padding: "1px 6px",
+                      background: "rgba(245,158,11,0.15)",
+                      border: "1px solid #f59e0b",
+                      borderRadius: 4,
+                      fontSize: 11,
+                      color: "#f59e0b",
+                      verticalAlign: "middle",
+                    }}
+                    title="High gas usage — >80% of network limit"
+                  >
+                    ⚠ High Gas
+                  </span>
+                )}
                 {ev.description}
+                {ev.function === "transfer" && (() => {
+                  const t = parseTransfer(ev.description);
+                  return t ? <FiatValue amount={t.amount} symbol={t.symbol} /> : null;
+                })()}
               </td>
             </tr>
           ))}

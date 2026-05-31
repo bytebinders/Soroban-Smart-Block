@@ -1,11 +1,16 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import type { BurnAlert } from "../api";
 import EventTable from "../components/EventTable";
 import RustCodeViewer from "../components/RustCodeViewer";
+import MigrationBanner from "../components/MigrationBanner";
+import SourceFileTree from "../components/SourceFileTree";
 import SimulateButton from "../components/SimulateButton";
 import InvocationFlowChart, { type InvocationNode } from "../components/InvocationFlowChart";
+import PrivilegedRoles from "../components/PrivilegedRoles";
+import SdkSnippet from "../components/SdkSnippet";
 
 // Demo source shown when no verified source is uploaded
 const DEMO_SOURCE = `// Verified source not yet uploaded for this contract.
@@ -42,12 +47,16 @@ const DEMO_TREE: InvocationNode = {
   ],
 };
 
-type Tab = "overview" | "source" | "simulate" | "flow";
+type Tab = "overview" | "source" | "simulate" | "flow" | "roles" | "networks" | "graph";
 
 export default function ContractPage() {
   const { id = "" } = useParams();
   const [tab, setTab] = useState<Tab>("overview");
   const [selectedFn, setSelectedFn] = useState("");
+  const [snippetFn, setSnippetFn] = useState<string | null>(null);
+
+  // ── Local ABI (session-only, never sent to server) ──────────────────────────
+  const { localAbi, loadAbi, clearAbi, parseError } = useLocalAbi(id);
 
   const { data: meta, isLoading: metaLoading } = useQuery({
     queryKey: ["contract", id],
@@ -61,22 +70,89 @@ export default function ContractPage() {
     enabled: !!id,
   });
 
+  const { data: burnAlerts = [] } = useQuery({
+    queryKey: ["burn-alerts", id],
+    queryFn: () => api.burnAlerts(id),
+    enabled: !!id,
+  });
+
+  const { data: migrationStatus } = useQuery({
+    queryKey: ["migration-status", id],
+    queryFn: () => api.migrationStatus(id),
+    enabled: !!id,
+  });
+
   const downloadAbi = () => {
     api.downloadAbi(id).catch(err => console.error("Download ABI failed:", err));
   };
 
+  // A contract is considered "unverified" when the server has no registered
+  // metadata for it (meta is null/404) or it has no functions defined.
+  const isUnverified = !meta || meta.functions.length === 0;
+
   if (metaLoading) return <p style={{ color: "var(--muted)" }}>Loading…</p>;
-  if (!meta) return <p>Contract not found.</p>;
+  if (!meta) {
+    // Contract not in the registry — show the upload zone as the primary UI
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="card">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "var(--yellow)",
+                flexShrink: 0,
+              }}
+            />
+            <h2 style={{ fontSize: 16 }}>Unverified Contract</h2>
+            <code style={{ fontSize: 12, color: "var(--muted)", wordBreak: "break-all" }}>{id}</code>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
+            This contract has no registered ABI. Upload a local spec file to inspect
+            its transaction logs — the file stays in your browser session only.
+          </p>
+          <AbiUploadZone
+            onLoad={loadAbi}
+            onClear={clearAbi}
+            localAbi={localAbi}
+            parseError={parseError}
+          />
+        </div>
+
+        {localAbi && (
+          <div className="card">
+            <h3 style={{ fontSize: 14, marginBottom: 12 }}>Recent Events</h3>
+            {evLoading ? (
+              <p style={{ color: "var(--muted)" }}>Loading…</p>
+            ) : (
+              <LocalAbiEventTable events={events} localAbi={localAbi} />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "source",   label: "Source Code" },
-    { key: "simulate", label: "Simulate" },
-    { key: "flow",     label: "Invocation Flow" },
+    { key: "overview",  label: "Overview" },
+    { key: "source",    label: "Source Code" },
+    { key: "simulate",  label: "Simulate" },
+    { key: "flow",      label: "Invocation Flow" },
+    { key: "roles",     label: "Privileged Roles" },
+    { key: "networks",  label: "Networks" },
+    { key: "graph",     label: "Address Graph" },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Issue #84: SEP-49 migration pending banner */}
+      {migrationStatus?.pending && migrationStatus.upgradedAtLedger != null && (
+        <MigrationBanner upgradedAtLedger={migrationStatus.upgradedAtLedger} />
+      )}
+
       {/* Header */}
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -85,21 +161,59 @@ export default function ContractPage() {
             <p style={{ color: "var(--muted)", marginBottom: 12 }}>{meta.description}</p>
             <code style={{ fontSize: 12, color: "var(--muted)", wordBreak: "break-all" }}>{id}</code>
           </div>
-          <button
-            onClick={downloadAbi}
-            style={{
-              padding: "8px 16px",
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            Download ABI
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Link
+              to={`/contract/${id}/workspace`}
+              style={{
+                padding: "8px 16px",
+                background: "var(--surface, #1a1a2e)",
+                color: "var(--accent)",
+                border: "1px solid var(--accent)",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: 13,
+                textDecoration: "none",
+              }}
+            >
+              🛠 Dev Workspace
+            </Link>
+            <button
+              onClick={downloadAbi}
+              style={{
+                padding: "8px 16px",
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              Download ABI
+            </button>
+          </div>
         </div>
+
+        {meta.dependency_advisory?.outdated && (
+          <div className="card" style={{ borderLeft: "4px solid #f97316", background: "rgba(249, 115, 22, 0.08)", color: "#78350f", marginTop: 12 }}>
+            <strong>{meta.dependency_advisory.summary}</strong>
+            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+              {meta.dependency_advisory.packages.map(pkg => (
+                <div key={pkg.name} style={{ minWidth: 180 }}>
+                  <div style={{ fontSize: 13 }}>
+                    <span style={{ fontWeight: 700 }}>{pkg.name}</span>
+                    <span style={{ marginLeft: 6 }}>
+                      {pkg.currentVersion} → {pkg.latestVersion}
+                    </span>
+                  </div>
+                  <a href={pkg.upgradeUrl} target="_blank" rel="noreferrer" style={{ color: "#b45309", fontSize: 13 }}>
+                    View upgrade guide
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", paddingBottom: 0 }}>
@@ -124,32 +238,141 @@ export default function ContractPage() {
       {/* Tab: Overview */}
       {tab === "overview" && (
         <>
+          {/* Local ABI upload zone — shown for unverified contracts or when
+              the user wants to override descriptions with a local file */}
+          {isUnverified && (
+            <div className="card">
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "var(--yellow)",
+                    flexShrink: 0,
+                  }}
+                />
+                <h3 style={{ fontSize: 13, color: "var(--yellow)" }}>
+                  No registered ABI — upload a local spec to decode events
+                </h3>
+              </div>
+              <AbiUploadZone
+                onLoad={loadAbi}
+                onClear={clearAbi}
+                localAbi={localAbi}
+                parseError={parseError}
+              />
+            </div>
+          )}
+
+          {/* Collapsible local ABI override for verified contracts */}
+          {!isUnverified && (
+            <details
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: "10px 16px",
+              }}
+            >
+              <summary
+                style={{
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: localAbi ? "var(--green)" : "var(--muted)",
+                  userSelect: "none",
+                  listStyle: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                {localAbi ? (
+                  <>
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: "var(--green)",
+                        display: "inline-block",
+                        flexShrink: 0,
+                      }}
+                    />
+                    Local ABI active — {localAbi.fileName}
+                  </>
+                ) : (
+                  <>▶ Override event descriptions with a local ABI file</>
+                )}
+              </summary>
+              <div style={{ marginTop: 12 }}>
+                <AbiUploadZone
+                  onLoad={loadAbi}
+                  onClear={clearAbi}
+                  localAbi={localAbi}
+                  parseError={parseError}
+                />
+              </div>
+            </details>
+          )}
+
           {meta.functions.length > 0 && (
             <div className="card">
               <h3 style={{ marginBottom: 8, fontSize: 14 }}>Functions</h3>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {meta.functions.map(f => (
                   <div key={f.name} className="card" style={{ padding: "8px 12px" }}>
-                    <span className="badge">{f.name}</span>
-                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>{f.description}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="badge">{f.name}</span>
+                      <span style={{ color: "var(--muted)", flex: 1 }}>{f.description}</span>
+                      {/* Issue #120: SDK snippet copy button */}
+                      <button
+                        onClick={() => setSnippetFn(snippetFn === f.name ? null : f.name)}
+                        style={{
+                          padding: "3px 10px",
+                          fontSize: 12,
+                          background: snippetFn === f.name ? "var(--accent, #7c3aed)" : "var(--bg2, #1e1e2e)",
+                          color: snippetFn === f.name ? "#fff" : "var(--muted)",
+                          border: "1px solid var(--border, #333)",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {"</>"}  SDK
+                      </button>
+                    </div>
+                    {snippetFn === f.name && (
+                      <SdkSnippet contractId={id} fnName={f.name} />
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
+
           <h3>Recent Events</h3>
           <div className="card">
-            {evLoading ? <p style={{ color: "var(--muted)" }}>Loading…</p> : <EventTable events={events} />}
+            {evLoading ? (
+              <p style={{ color: "var(--muted)" }}>Loading…</p>
+            ) : localAbi ? (
+              // Re-render with local ABI descriptions
+              <LocalAbiEventTable events={events} localAbi={localAbi} />
+            ) : (
+              <EventTable events={events} />
+            )}
           </div>
         </>
       )}
 
-      {/* Tab: Source Code — Issue #45 */}
+      {/* Tab: Source Code — Issues #45, #85 */}
       {tab === "source" && (
-        <RustCodeViewer
-          source={(meta as any).source ?? DEMO_SOURCE}
-          filename={(meta as any).source_file ?? `${id.slice(0, 8)}.rs`}
-        />
+        meta.source_files && meta.source_files.length > 0
+          ? <SourceFileTree files={meta.source_files} />
+          : <RustCodeViewer
+              source={meta.source ?? DEMO_SOURCE}
+              filename={meta.source_file ?? `${id.slice(0, 8)}.rs`}
+            />
       )}
 
       {/* Tab: Simulate — Issue #46 */}
@@ -181,6 +404,15 @@ export default function ContractPage() {
       {tab === "flow" && (
         <InvocationFlowChart root={(meta as any).invocation_tree ?? DEMO_TREE} />
       )}
+
+      {/* Tab: Privileged Roles */}
+      {tab === "roles" && <PrivilegedRoles contractId={id} />}
+
+      {/* Tab: Network Comparison — Issue #124 */}
+      {tab === "networks" && <NetworkComparison contractId={id} />}
+
+      {/* Tab: Address Connection Graph — Issue #126 */}
+      {tab === "graph" && <AddressConnectionGraph contractId={id} />}
     </div>
   );
 }
