@@ -133,6 +133,19 @@ export const db = {
       );
       CREATE INDEX IF NOT EXISTS idx_state_diff_contract_ledger
         ON storage_state_diffs(contract_id, ledger ASC);
+
+      -- Issue #172: CAP-0077 quorum freeze events
+      CREATE TABLE IF NOT EXISTS quorum_freezes (
+        id          BIGSERIAL PRIMARY KEY,
+        contract_id TEXT NOT NULL,
+        frozen_ids  JSONB NOT NULL,
+        ledger      BIGINT,
+        tx_hash     TEXT,
+        is_frozen   BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_quorum_freezes_contract
+        ON quorum_freezes(contract_id);
     `);
   },
 
